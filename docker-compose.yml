@@ -8,24 +8,20 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
-      - DATABASE_URL=postgres://refinery_user:refinery_pass@postgres:5432/refinery_db
+      - MONGODB_URI=mongodb://mongodb:27017/oroc_refinery
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - postgres
+      - mongodb
       - redis
     restart: always
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: refinery_postgres
-    environment:
-      POSTGRES_USER: refinery_user
-      POSTGRES_PASSWORD: refinery_pass
-      POSTGRES_DB: refinery_db
+  mongodb:
+    image: mongo:7.0
+    container_name: refinery_mongodb
     ports:
-      - "5432:5432"
+      - "27017:27017"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mongodb_data:/data/db
 
   redis:
     image: redis:7-alpine
@@ -36,5 +32,5 @@ services:
       - redis_data:/data
 
 volumes:
-  postgres_data:
+  mongodb_data:
   redis_data:

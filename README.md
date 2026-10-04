@@ -11,7 +11,7 @@
 | :--- | :--- |
 | **Frontend UI** | React 18, TypeScript, Vite, Tailwind CSS, Lucide Icons |
 | **Backend Service** | Node.js, Express.js REST API, Server-Sent Events (SSE) Live Stream |
-| **Database & Cache** | PostgreSQL, Drizzle ORM Schema, Redis Cache Middleware |
+| **Database & Cache** | MongoDB, Mongoose BSON Schemas, Redis Cache Middleware |
 | **Containerization** | Docker, Docker Compose |
 | **Version Control** | Git / GitHub |
 

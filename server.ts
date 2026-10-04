@@ -2,11 +2,14 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { router as apiRouter } from './server/routes.js';
+import { connectMongoDB } from './server/mongoDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
+  await connectMongoDB();
+
   const app = express();
   const PORT = process.env.PORT || 3000;
 
@@ -37,7 +40,7 @@ async function startServer() {
 
   app.listen(PORT, () => {
     console.log(`[OROC REFINERY BACKEND] Express REST API running on http://localhost:${PORT}`);
-    console.log(`[OROC REFINERY BACKEND] PostgreSQL simulation engine initialized.`);
+    console.log(`[OROC REFINERY BACKEND] MongoDB BSON Document Store Engine active.`);
     console.log(`[OROC REFINERY BACKEND] Redis pub/sub telemetry cache initialized.`);
   });
 }

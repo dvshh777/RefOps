@@ -48,7 +48,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               LIVE TRANSMISSION ·{' '}
             </span>
             <span className="text-gray-400">
-              Express + PostgreSQL + Redis API actively streaming operational telemetry. Micro-fluctuations live.
+              Express + MongoDB + Redis API actively streaming operational telemetry. Micro-fluctuations live.
             </span>
           </div>
 

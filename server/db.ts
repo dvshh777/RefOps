@@ -13,6 +13,7 @@ import {
   UserAccount,
   AnalysisRecord,
 } from '../src/types/refinery.js';
+import { UserModel, AnalysisModel, RefineryStateModel } from './mongoDb.js';
 
 // Initial Empty Refinery State as seen in the reference model
 const EMPTY_PLANT: PlantOverview = {
@@ -171,23 +172,39 @@ export class RefineryDatabase {
     };
 
     this.users.set(userId, { account: newAccount, passwordHash: password });
-    this.userAnalysisRecords.set(userId, [
-      {
-        id: `ANL-${Math.floor(1000 + Math.random() * 9000)}`,
-        userId: userId,
-        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
-        title: 'Initial Account Onboarding Analysis',
-        department: 'production',
-        throughputPeakBbl: 350000,
-        runningUnitsCount: 3,
-        alarmCount: 0,
-        summary: `Baseline analysis record created for ${name} (${email}).`,
-        status: 'COMPLETED',
-      },
-    ]);
+
+    const initialAnalysis: AnalysisRecord = {
+      id: `ANL-${Math.floor(1000 + Math.random() * 9000)}`,
+      userId: userId,
+      timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      title: 'Initial Account Onboarding Analysis',
+      department: 'production',
+      throughputPeakBbl: 350000,
+      runningUnitsCount: 3,
+      alarmCount: 0,
+      summary: `Baseline analysis record created for ${name} (${email}).`,
+      status: 'COMPLETED',
+    };
+
+    this.userAnalysisRecords.set(userId, [initialAnalysis]);
 
     this.state.currentUser = newAccount;
     this.state.analysisHistory = this.userAnalysisRecords.get(userId) || [];
+
+    // Async persist to MongoDB collections
+    UserModel.create({
+      userId,
+      name,
+      email,
+      passwordHash: password,
+      role: 'Process Operations Tech',
+      createdAt: newAccount.createdAt,
+    }).catch(() => {});
+
+    AnalysisModel.create(initialAnalysis).catch(() => {});
+
+    this.syncToMongo();
+
     return newAccount;
   }
 
@@ -237,11 +254,69 @@ export class RefineryDatabase {
     const userRecords = this.userAnalysisRecords.get(userId) || [];
     this.userAnalysisRecords.set(userId, [newRecord, ...userRecords]);
     this.state.analysisHistory = this.userAnalysisRecords.get(userId) || [];
+
+    // Async persist to MongoDB Analysis collection
+    AnalysisModel.create(newRecord).catch(() => {});
+
+    this.syncToMongo();
+
     return newRecord;
   }
 
   public getState(): RefineryState {
     return this.state;
+  }
+
+  public async getStateAsync(): Promise<RefineryState> {
+    try {
+      const doc = await RefineryStateModel.findOne({ stateKey: 'PLANT-01-STATE' });
+      if (doc) {
+        this.state = {
+          ...this.state,
+          plant: doc.plant || this.state.plant,
+          units: doc.units || this.state.units,
+          throughputHistory: doc.throughputHistory || this.state.throughputHistory,
+          alarms: doc.alarms || this.state.alarms,
+          maintenance: doc.maintenance || this.state.maintenance,
+          inspections: doc.inspections || this.state.inspections,
+          kpis: doc.kpis || this.state.kpis,
+          uploadHistory: doc.uploadHistory || this.state.uploadHistory,
+          shiftLogs: doc.shiftLogs || this.state.shiftLogs,
+          predictiveAssets: doc.predictiveAssets || this.state.predictiveAssets,
+          emissions: doc.emissions || this.state.emissions,
+          importedDepartments: doc.importedDepartments || this.state.importedDepartments,
+        };
+      }
+    } catch (e) {
+      // MongoDB offline fallback
+    }
+    return this.state;
+  }
+
+  public async syncToMongo() {
+    try {
+      await RefineryStateModel.findOneAndUpdate(
+        { stateKey: 'PLANT-01-STATE' },
+        {
+          stateKey: 'PLANT-01-STATE',
+          plant: this.state.plant,
+          units: this.state.units,
+          throughputHistory: this.state.throughputHistory,
+          alarms: this.state.alarms,
+          maintenance: this.state.maintenance,
+          inspections: this.state.inspections,
+          kpis: this.state.kpis,
+          uploadHistory: this.state.uploadHistory,
+          shiftLogs: this.state.shiftLogs,
+          predictiveAssets: this.state.predictiveAssets,
+          emissions: this.state.emissions,
+          importedDepartments: this.state.importedDepartments,
+        },
+        { upsert: true, new: true }
+      );
+    } catch (e) {
+      // MongoDB offline fallback
+    }
   }
 
   public resetState(): RefineryState {
@@ -265,6 +340,7 @@ export class RefineryDatabase {
         kpis: false,
       },
     };
+    this.syncToMongo();
     return this.state;
   }
 
@@ -287,6 +363,7 @@ export class RefineryDatabase {
       this.state.shiftLogs = [];
     }
     this.state.shiftLogs = [newEntry, ...this.state.shiftLogs];
+    this.syncToMongo();
     return this.state;
   }
 
@@ -378,6 +455,8 @@ export class RefineryDatabase {
     } else {
       this.state.plant.status = 'NORMAL OPERATIONS';
     }
+
+    this.syncToMongo();
   }
 
   public loadProductionCSV(rows: any[]) {

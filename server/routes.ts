@@ -19,7 +19,7 @@ router.get('/health', async (_req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     stack: {
       framework: 'Express.js (Node.js)',
-      database: 'PostgreSQL Relational Storage (In-Memory Engine & Drizzle schema compliant)',
+      database: 'MongoDB BSON Document Store (Mongoose ODM)',
       cache: 'Redis Telemetry PubSub & Key-Value Cache',
       apiProtocol: 'REST API + SSE Live Streaming',
       dockerSupport: true,
@@ -37,9 +37,9 @@ router.get('/state', async (_req: Request, res: Response) => {
     return res.json({ source: 'redis-cache', state: cachedState });
   }
 
-  const currentState = db.getState();
+  const currentState = await db.getStateAsync();
   await redisCache.set('refinery:state', currentState, 2); // cache for 2 sec
-  res.json({ source: 'postgres-db', state: currentState });
+  res.json({ source: 'mongodb-database', state: currentState });
 });
 
 // POST /api/upload - Parse & ingest departmental CSV file
