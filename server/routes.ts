@@ -171,7 +171,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Name, email, and password are required.' });
       return;
     }
-    const user = db.registerUser(name, email, password);
+    const user = await db.registerUserAsync(name, email, password);
     await redisCache.del('refinery:state');
     res.json({ message: 'Account registered successfully.', user, state: db.getState() });
   } catch (err: any) {
@@ -187,7 +187,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Email and password are required.' });
       return;
     }
-    const user = db.loginUser(email, password);
+    const user = await db.loginUserAsync(email, password);
     await redisCache.del('refinery:state');
     res.json({ message: 'Login successful.', user, state: db.getState() });
   } catch (err: any) {

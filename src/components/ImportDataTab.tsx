@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import Papa from 'papaparse';
-import { CsvUploadRecord } from '../types/refinery.js';
+import { CsvUploadRecord, RefineryState } from '../types/refinery.js';
 import {
   Upload,
   FileSpreadsheet,
@@ -16,7 +16,12 @@ import {
   Search,
   Filter,
   Check,
-  Clock
+  Clock,
+  FileJson,
+  FolderDown,
+  Database,
+  Save,
+  Share2
 } from 'lucide-react';
 
 interface ImportDataTabProps {
@@ -31,6 +36,7 @@ interface ImportDataTabProps {
     inspections: boolean;
     kpis: boolean;
   };
+  refineryState?: RefineryState;
 }
 
 export const ImportDataTab: React.FC<ImportDataTabProps> = ({
@@ -40,6 +46,7 @@ export const ImportDataTab: React.FC<ImportDataTabProps> = ({
   onClearUploadHistory,
   uploadHistory = [],
   importedDepts,
+  refineryState,
 }) => {
   const [selectedDept, setSelectedDept] = useState<string>('production');
   const [historyFilter, setHistoryFilter] = useState<string>('ALL');
@@ -129,7 +136,7 @@ export const ImportDataTab: React.FC<ImportDataTabProps> = ({
       await onUploadCsv(selectedDept, rawText);
       setMessage({
         type: 'success',
-        text: `Successfully ingested CSV data for '${selectedDept.toUpperCase()}' into Express + PostgreSQL REST API!`,
+        text: `Successfully ingested CSV data for '${selectedDept.toUpperCase()}' into Express + MongoDB REST API!`,
       });
       setRawText('');
       setPreviewRows([]);
@@ -146,6 +153,84 @@ export const ImportDataTab: React.FC<ImportDataTabProps> = ({
 
   const handleDownloadSample = (deptId: string) => {
     window.open(`/api/sample-csv/${deptId}`, '_blank');
+  };
+
+  // Export Full Dashboard State as JSON
+  const handleExportJson = () => {
+    if (!refineryState) {
+      setMessage({ type: 'error', text: 'Refinery state is currently unavailable for export.' });
+      return;
+    }
+
+    const jsonString = JSON.stringify(refineryState, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().replace('T', '_').slice(0, 19);
+    const filename = `oroc_refinery_state_${dateStr}.json`;
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setMessage({
+      type: 'success',
+      text: `Exported full dashboard state snapshot to local JSON file: ${filename}`,
+    });
+  };
+
+  // Export specific department or combined CSV file
+  const handleExportCsv = (type: 'production' | 'maintenance' | 'inspections' | 'kpis' | 'combined') => {
+    if (!refineryState) {
+      setMessage({ type: 'error', text: 'Refinery state is currently unavailable for export.' });
+      return;
+    }
+
+    let csvContent = '';
+    let filename = '';
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    if (type === 'production') {
+      filename = `oroc_production_units_${dateStr}.csv`;
+      csvContent = Papa.unparse(refineryState.units || []);
+    } else if (type === 'maintenance') {
+      filename = `oroc_maintenance_orders_${dateStr}.csv`;
+      csvContent = Papa.unparse(refineryState.maintenance || []);
+    } else if (type === 'inspections') {
+      filename = `oroc_safety_inspections_${dateStr}.csv`;
+      csvContent = Papa.unparse(refineryState.inspections || []);
+    } else if (type === 'kpis') {
+      filename = `oroc_kpis_${dateStr}.csv`;
+      csvContent = Papa.unparse(refineryState.kpis || []);
+    } else if (type === 'combined') {
+      filename = `oroc_combined_telemetry_${dateStr}.csv`;
+      const combinedData = [
+        ...(refineryState.units || []).map((u) => ({ TYPE: 'PRODUCTION_UNIT', TAG: u.tag, NAME: u.unit, STATE: u.state, RATE: u.rate, LOAD: `${u.load}%`, TEMP: `${u.temp}°C` })),
+        ...(refineryState.maintenance || []).map((m) => ({ TYPE: 'MAINTENANCE_ORDER', TAG: m.equipmentTag, NAME: m.description, STATE: m.status, PRIORITY: m.priority })),
+        ...(refineryState.inspections || []).map((i) => ({ TYPE: 'SAFETY_INSPECTION', TAG: i.unitTag, NAME: i.category, STATE: i.status, INSPECTOR: i.inspector })),
+        ...(refineryState.kpis || []).map((k) => ({ TYPE: 'KPI_METRIC', TAG: k.key, NAME: k.label, STATE: k.status, VALUE: `${k.value} ${k.unit}` })),
+      ];
+      csvContent = Papa.unparse(combinedData);
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    setMessage({
+      type: 'success',
+      text: `Exported ${type.toUpperCase()} telemetry data to local CSV file: ${filename}`,
+    });
   };
 
   const filteredHistory = uploadHistory.filter((item) => {
@@ -375,6 +460,122 @@ export const ImportDataTab: React.FC<ImportDataTabProps> = ({
             <Play className="w-4 h-4 fill-current" />
             <span>{isUploading ? 'INGESTING DATA...' : 'INGEST & RUN TELEMETRY'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Export Section - Save Dashboard State Locally */}
+      <div className="bg-[#10141a] border border-[#1e2631] rounded p-5 space-y-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[#18202b]">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 bg-cyan-500 rounded-xs"></span>
+            <h3 className="font-bold text-gray-200 uppercase tracking-wider tech-font flex items-center gap-2">
+              <FolderDown className="w-4 h-4 text-cyan-400" />
+              <span>EXPORT LOCAL DASHBOARD STATE & TELEMETRY</span>
+            </h3>
+          </div>
+          <span className="text-[11px] text-gray-400 font-mono">
+            Save live plant parameters, unit loads, shift logs, and KPIs to JSON or CSV
+          </span>
+        </div>
+
+        {/* Export Quick Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {/* Card 1: JSON Full State */}
+          <div className="bg-[#0b0e11] border border-[#1e2632] hover:border-cyan-500/50 rounded p-4 space-y-3 flex flex-col justify-between transition-colors">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-200 text-xs flex items-center gap-1.5 tech-font">
+                  <FileJson className="w-4 h-4 text-cyan-400" />
+                  <span>FULL STATE SNAPSHOT</span>
+                </span>
+                <span className="text-[10px] bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded border border-cyan-800 font-bold">
+                  JSON FORMAT
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-400 leading-tight">
+                Export complete JSON bundle containing plant overview, production units, throughput history, alarms, shift logs, maintenance, and emissions.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleExportJson}
+              className="w-full bg-cyan-600/20 hover:bg-cyan-500 hover:text-black text-cyan-300 font-bold text-xs py-2 px-3 rounded border border-cyan-500/40 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>EXPORT DASHBOARD STATE (JSON)</span>
+            </button>
+          </div>
+
+          {/* Card 2: Combined Telemetry CSV */}
+          <div className="bg-[#0b0e11] border border-[#1e2632] hover:border-amber-500/50 rounded p-4 space-y-3 flex flex-col justify-between transition-colors">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-gray-200 text-xs flex items-center gap-1.5 tech-font">
+                  <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+                  <span>COMBINED TELEMETRY</span>
+                </span>
+                <span className="text-[10px] bg-amber-950 text-amber-400 px-2 py-0.5 rounded border border-amber-800 font-bold">
+                  CSV BUNDLE
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-400 leading-tight">
+                Consolidated multi-department CSV dataset merging units, work orders, safety inspections, and KPI targets.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleExportCsv('combined')}
+              className="w-full bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-300 font-bold text-xs py-2 px-3 rounded border border-amber-500/40 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>EXPORT COMBINED BUNDLE (CSV)</span>
+            </button>
+          </div>
+
+          {/* Card 3: Specific Department CSVs */}
+          <div className="bg-[#0b0e11] border border-[#1e2632] rounded p-4 space-y-2 col-span-1 md:col-span-2 lg:col-span-1">
+            <div className="flex items-center justify-between pb-1 border-b border-[#1c2430]">
+              <span className="font-bold text-gray-200 text-xs flex items-center gap-1.5 tech-font">
+                <Database className="w-4 h-4 text-emerald-400" />
+                <span>DEPARTMENT CSV EXPORTS</span>
+              </span>
+              <span className="text-[10px] text-gray-500 font-mono">INDIVIDUAL FILES</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px]">
+              <button
+                type="button"
+                onClick={() => handleExportCsv('production')}
+                className="bg-[#141b24] hover:bg-[#1a2330] text-gray-300 hover:text-white px-2.5 py-1.5 rounded border border-[#232e3d] flex items-center justify-between text-[10px] cursor-pointer"
+              >
+                <span>Production Units</span>
+                <Download className="w-3 h-3 text-amber-400" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportCsv('maintenance')}
+                className="bg-[#141b24] hover:bg-[#1a2330] text-gray-300 hover:text-white px-2.5 py-1.5 rounded border border-[#232e3d] flex items-center justify-between text-[10px] cursor-pointer"
+              >
+                <span>Maintenance Orders</span>
+                <Download className="w-3 h-3 text-amber-400" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportCsv('inspections')}
+                className="bg-[#141b24] hover:bg-[#1a2330] text-gray-300 hover:text-white px-2.5 py-1.5 rounded border border-[#232e3d] flex items-center justify-between text-[10px] cursor-pointer"
+              >
+                <span>Safety Inspections</span>
+                <Download className="w-3 h-3 text-amber-400" />
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportCsv('kpis')}
+                className="bg-[#141b24] hover:bg-[#1a2330] text-gray-300 hover:text-white px-2.5 py-1.5 rounded border border-[#232e3d] flex items-center justify-between text-[10px] cursor-pointer"
+              >
+                <span>Operational KPIs</span>
+                <Download className="w-3 h-3 text-amber-400" />
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

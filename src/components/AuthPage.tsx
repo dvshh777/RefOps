@@ -20,7 +20,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
     setIsLoading(true);
 
     const endpoint = mode === 'REGISTER' ? '/api/auth/register' : '/api/auth/login';
-    const payload = mode === 'REGISTER' ? { name, email, password } : { email, password };
+    const trimmedEmail = email.trim();
+    const payload = mode === 'REGISTER' ? { name: name.trim(), email: trimmedEmail, password } : { email: trimmedEmail, password };
 
     try {
       const res = await fetch(endpoint, {

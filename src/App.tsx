@@ -290,6 +290,7 @@ export default function App() {
               onClearUploadHistory={handleClearUploadHistory}
               uploadHistory={refineryState.uploadHistory}
               importedDepts={refineryState.importedDepartments}
+              refineryState={refineryState}
             />
           )}
         </main>

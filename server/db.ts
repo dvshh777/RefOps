@@ -155,8 +155,9 @@ export class RefineryDatabase {
   }
 
   public registerUser(name: string, email: string, password: string): UserAccount {
+    const normEmail = email.trim().toLowerCase();
     const existing = Array.from(this.users.values()).find(
-      (u) => u.account.email.toLowerCase() === email.toLowerCase()
+      (u) => u.account.email.trim().toLowerCase() === normEmail
     );
     if (existing) {
       throw new Error('User account already exists with this email.');
@@ -166,7 +167,7 @@ export class RefineryDatabase {
     const newAccount: UserAccount = {
       id: userId,
       name,
-      email,
+      email: normEmail,
       role: 'Process Operations Tech',
       createdAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
     };
@@ -182,7 +183,7 @@ export class RefineryDatabase {
       throughputPeakBbl: 350000,
       runningUnitsCount: 3,
       alarmCount: 0,
-      summary: `Baseline analysis record created for ${name} (${email}).`,
+      summary: `Baseline analysis record created for ${name} (${normEmail}).`,
       status: 'COMPLETED',
     };
 
@@ -195,7 +196,7 @@ export class RefineryDatabase {
     UserModel.create({
       userId,
       name,
-      email,
+      email: normEmail,
       passwordHash: password,
       role: 'Process Operations Tech',
       createdAt: newAccount.createdAt,
@@ -208,9 +209,34 @@ export class RefineryDatabase {
     return newAccount;
   }
 
+  public async registerUserAsync(name: string, email: string, password: string): Promise<UserAccount> {
+    const normEmail = email.trim().toLowerCase();
+
+    // Check memory first
+    const existingMemory = Array.from(this.users.values()).find(
+      (u) => u.account.email.trim().toLowerCase() === normEmail
+    );
+    if (existingMemory) {
+      throw new Error('User account already exists with this email.');
+    }
+
+    // Check MongoDB collection
+    try {
+      const existingMongo = await UserModel.findOne({ email: new RegExp(`^${normEmail}$`, 'i') });
+      if (existingMongo) {
+        throw new Error('User account already exists with this email.');
+      }
+    } catch (e) {
+      // fallback
+    }
+
+    return this.registerUser(name, email, password);
+  }
+
   public loginUser(email: string, password: string): UserAccount {
+    const normEmail = email.trim().toLowerCase();
     const entry = Array.from(this.users.values()).find(
-      (u) => u.account.email.toLowerCase() === email.toLowerCase() && u.passwordHash === password
+      (u) => u.account.email.trim().toLowerCase() === normEmail && u.passwordHash === password
     );
 
     if (!entry) {
@@ -219,6 +245,70 @@ export class RefineryDatabase {
 
     this.state.currentUser = entry.account;
     this.state.analysisHistory = this.userAnalysisRecords.get(entry.account.id) || [];
+    return entry.account;
+  }
+
+  public async loginUserAsync(email: string, password: string): Promise<UserAccount> {
+    const normEmail = email.trim().toLowerCase();
+
+    // 1. Check in-memory map first
+    let entry = Array.from(this.users.values()).find(
+      (u) => u.account.email.trim().toLowerCase() === normEmail && u.passwordHash === password
+    );
+
+    // 2. If not found in memory, query MongoDB database!
+    if (!entry) {
+      try {
+        const mongoUser = await UserModel.findOne({ email: new RegExp(`^${normEmail}$`, 'i') });
+        if (mongoUser && mongoUser.passwordHash === password) {
+          const userAcc: UserAccount = {
+            id: mongoUser.userId,
+            name: mongoUser.name,
+            email: mongoUser.email,
+            role: mongoUser.role || 'Process Operations Tech',
+            createdAt: mongoUser.createdAt,
+          };
+
+          // Re-populate memory cache
+          this.users.set(mongoUser.userId, { account: userAcc, passwordHash: mongoUser.passwordHash });
+          entry = { account: userAcc, passwordHash: mongoUser.passwordHash };
+        }
+      } catch (e) {
+        // MongoDB query fallback
+      }
+    }
+
+    if (!entry) {
+      throw new Error('Invalid email or password credentials.');
+    }
+
+    // 3. Fetch user's analysis history from memory or MongoDB
+    let userRecords = this.userAnalysisRecords.get(entry.account.id);
+    if (!userRecords || userRecords.length === 0) {
+      try {
+        const mongoAnalysis = await AnalysisModel.find({ userId: entry.account.id });
+        if (mongoAnalysis && mongoAnalysis.length > 0) {
+          userRecords = mongoAnalysis.map(a => ({
+            id: a.id,
+            userId: a.userId,
+            timestamp: a.timestamp,
+            title: a.title,
+            department: a.department,
+            throughputPeakBbl: a.throughputPeakBbl,
+            runningUnitsCount: a.runningUnitsCount,
+            alarmCount: a.alarmCount,
+            summary: a.summary,
+            status: a.status as 'COMPLETED' | 'LIVE' | 'ARCHIVED',
+          }));
+          this.userAnalysisRecords.set(entry.account.id, userRecords);
+        }
+      } catch (e) {
+        // fallback
+      }
+    }
+
+    this.state.currentUser = entry.account;
+    this.state.analysisHistory = userRecords || [];
     return entry.account;
   }
 
