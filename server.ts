@@ -1,13 +1,39 @@
-import express from 'express';
-import path from 'path';
 import { fileURLToPath } from 'url';
-import { router as apiRouter } from './server/routes.js';
-import { connectMongoDB } from './server/mongoDb.js';
+import { spawn } from 'child_process';
+import path from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const isTsxLoaded = 
+  process.execArgv.some(arg => arg.includes('tsx')) || 
+  process.env.TSX_LOADED === 'true';
+
+if (!isTsxLoaded) {
+  // Re-launch with tsx loader so TypeScript files with .js import specifiers resolve correctly
+  const child = spawn(process.execPath, ['--import', 'tsx', __filename], {
+    stdio: 'inherit',
+    env: { ...process.env, TSX_LOADED: 'true' }
+  });
+
+  child.on('exit', (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+    }
+    process.exit(code ?? 0);
+  });
+} else {
+  startServer().catch(err => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
+
 async function startServer() {
+  const express = (await import('express')).default;
+  const { router: apiRouter } = await import('./server/routes.js');
+  const { connectMongoDB } = await import('./server/mongoDb.js');
+
   await connectMongoDB();
 
   const app = express();
@@ -45,6 +71,3 @@ async function startServer() {
   });
 }
 
-startServer().catch(err => {
-  console.error('Failed to start server:', err);
-});
