@@ -117,7 +117,11 @@ export default function App() {
     const res = await fetch('/api/load-samples', { method: 'POST' });
     if (res.ok) {
       const data = await res.json();
-      setRefineryState(data.state);
+      setRefineryState(prev => ({
+        ...data.state,
+        currentUser: data.state.currentUser || prev.currentUser,
+        analysisHistory: data.state.analysisHistory?.length ? data.state.analysisHistory : prev.analysisHistory,
+      }));
     }
   };
 
@@ -125,7 +129,11 @@ export default function App() {
     const res = await fetch('/api/reset', { method: 'POST' });
     if (res.ok) {
       const data = await res.json();
-      setRefineryState(data.state);
+      setRefineryState(prev => ({
+        ...data.state,
+        currentUser: data.state.currentUser || prev.currentUser,
+        analysisHistory: data.state.analysisHistory?.length ? data.state.analysisHistory : prev.analysisHistory,
+      }));
     }
   };
 
@@ -133,7 +141,11 @@ export default function App() {
     const res = await fetch('/api/upload-history/clear', { method: 'POST' });
     if (res.ok) {
       const data = await res.json();
-      setRefineryState(data.state);
+      setRefineryState(prev => ({
+        ...data.state,
+        currentUser: data.state.currentUser || prev.currentUser,
+        analysisHistory: data.state.analysisHistory?.length ? data.state.analysisHistory : prev.analysisHistory,
+      }));
     }
   };
 

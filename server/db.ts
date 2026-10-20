@@ -410,8 +410,13 @@ export class RefineryDatabase {
   }
 
   public resetState(): RefineryState {
+    const preservedUser = this.state.currentUser;
+    const preservedAnalysis = this.state.analysisHistory;
+
     this.state = {
       isDataImported: false,
+      currentUser: preservedUser,
+      analysisHistory: preservedAnalysis,
       plant: { ...EMPTY_PLANT },
       units: [...INITIAL_UNITS],
       throughputHistory: [],
