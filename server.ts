@@ -30,6 +30,9 @@ if (!isTsxLoaded) {
 }
 
 async function startServer() {
+  const dotenv = (await import('dotenv')).default;
+  dotenv.config();
+
   const express = (await import('express')).default;
   const { router: apiRouter } = await import('./server/routes.js');
   const { connectMongoDB } = await import('./server/mongoDb.js');
