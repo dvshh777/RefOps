@@ -11,7 +11,7 @@ const isTsxLoaded =
 
 if (!isTsxLoaded) {
   // Re-launch with tsx loader so TypeScript files with .js import specifiers resolve correctly
-  const child = spawn(process.execPath, ['--import', 'tsx', __filename], {
+  const child = spawn(process.execPath, ['--import', 'tsx', __filename, ...process.argv.slice(2)], {
     stdio: 'inherit',
     env: { ...process.env, TSX_LOADED: 'true' }
   });
@@ -29,9 +29,18 @@ if (!isTsxLoaded) {
   });
 }
 
+function getPort(): number {
+  const portArgIdx = process.argv.indexOf('--port');
+  if (portArgIdx !== -1 && process.argv[portArgIdx + 1]) {
+    return parseInt(process.argv[portArgIdx + 1], 10);
+  }
+  // Dev server must strictly run on port 3000
+  return 3000;
+}
+
 async function startServer() {
   const dotenv = (await import('dotenv')).default;
-  dotenv.config();
+  dotenv.config({ override: true });
 
   const express = (await import('express')).default;
   const { router: apiRouter } = await import('./server/routes.js');
@@ -40,7 +49,7 @@ async function startServer() {
   await connectMongoDB();
 
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = getPort();
 
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -67,8 +76,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, () => {
-    console.log(`[OROC REFINERY BACKEND] Express REST API running on http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[OROC REFINERY BACKEND] Express REST API running on http://0.0.0.0:${PORT}`);
     console.log(`[OROC REFINERY BACKEND] MongoDB BSON Document Store Engine active.`);
     console.log(`[OROC REFINERY BACKEND] Redis pub/sub telemetry cache initialized.`);
   });
